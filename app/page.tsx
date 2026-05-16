@@ -1,65 +1,95 @@
-import Image from "next/image";
+import { getSession } from '@/lib/auth'
+import OrbsBackground from '@/components/orbs-background'
+import Link from 'next/link'
 
-export default function Home() {
+export default async function LandingPage() {
+  const session = await getSession()
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <main className="relative flex min-h-svh flex-col items-center justify-center overflow-hidden">
+      <OrbsBackground />
+
+      <div className="relative z-10 w-full max-w-md px-4 text-center">
+        <h1
+          className="text-6xl font-bold tracking-tight drop-shadow-lg"
+          style={{ color: 'var(--primary)' }}
+        >
+          SPLITLINGS
+        </h1>
+        <p className="mt-3 text-lg" style={{ color: 'rgba(220,230,255,0.7)' }}>
+          Split the orbs before they go supernova
+        </p>
+
+        <div className="mt-10 space-y-3">
+          <Link
+            href={session ? '/game' : '/auth/login'}
+            className="flex h-14 w-full items-center justify-center rounded-xl text-lg font-semibold transition-opacity hover:opacity-90"
+            style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}
+          >
+            Start Playing
+          </Link>
+          <Link
+            href="/leaderboard"
+            className="flex h-12 w-full items-center justify-center rounded-xl border text-sm font-medium transition-colors hover:bg-white/5"
+            style={{
+              borderColor: 'rgba(255,255,255,0.2)',
+              color: 'rgba(220,230,255,0.8)',
+              background: 'rgba(255,255,255,0.05)',
+              backdropFilter: 'blur(8px)',
+            }}
+          >
+            View Leaderboard
+          </Link>
+        </div>
+
+        <div
+          className="mt-10 rounded-xl border p-5 text-left"
+          style={{
+            borderColor: 'rgba(255,255,255,0.12)',
+            background: 'rgba(255,255,255,0.05)',
+            backdropFilter: 'blur(8px)',
+          }}
+        >
+          <h3 className="mb-3 font-semibold" style={{ color: 'rgba(220,230,255,0.9)' }}>
+            How to Play
+          </h3>
+          <ul className="space-y-2 text-sm" style={{ color: 'rgba(180,200,240,0.7)' }}>
+            <li className="flex items-start gap-2">
+              <span style={{ color: 'var(--primary)' }}>1.</span>
+              <span>Tap orbs to split them into smaller pieces</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span style={{ color: 'var(--primary)' }}>2.</span>
+              <span>Chain same colors for combo multipliers</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span style={{ color: 'var(--primary)' }}>3.</span>
+              <span>Manage your energy bar wisely</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span style={{ color: 'var(--primary)' }}>4.</span>
+              <span className="font-medium" style={{ color: 'rgba(220,230,255,0.9)' }}>
+                Tap and hold anywhere for menu
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span style={{ color: 'var(--destructive)' }}>5.</span>
+              <span>Don&apos;t let orbs reach supernova size!</span>
+            </li>
+          </ul>
+        </div>
+
+        {!session && (
+          <p className="mt-6 text-xs" style={{ color: 'rgba(150,170,210,0.4)' }}>
+            Sign in to save scores and compete globally
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+        )}
+        {session && (
+          <p className="mt-6 text-xs" style={{ color: 'rgba(150,170,210,0.5)' }}>
+            Playing as <span style={{ color: 'var(--primary)' }}>{session.username}</span>
+          </p>
+        )}
+      </div>
+    </main>
+  )
 }
