@@ -33,7 +33,12 @@ export default function GamePage() {
   }, [])
 
   return (
-    <main className="fixed inset-0 overflow-hidden" style={{ background: 'hsl(230, 25%, 8%)' }}>
+    <main
+      className="fixed inset-0 overflow-hidden"
+      style={{ background: 'hsl(230, 25%, 8%)' }}
+      data-score={score}
+      data-combo={combo}
+    >
       {/* Top nav bar */}
       <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-4 py-2 pointer-events-none">
         <Link
