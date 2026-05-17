@@ -1,6 +1,7 @@
 /**
  * Splitlings E2E smoke tests.
  * Verifies landing → game canvas → orb tapping flow.
+ * After the v0 restore the game allows guest play without sign-in.
  */
 import { test, expect } from '@playwright/test'
 
@@ -13,29 +14,50 @@ test.describe.serial('Splitlings smoke', () => {
     await expect(page.getByRole('link', { name: /view leaderboard/i })).toBeVisible()
   })
 
-  test('Start Playing redirects guests to login', async ({ page }) => {
+  test('Start Playing goes directly to /game (guest mode)', async ({ page }) => {
     await page.goto('/')
-    // The Start Playing href is server-side conditional. Check the href directly first.
-    const href = await page.getByRole('link', { name: /start playing/i }).getAttribute('href')
+    const link = page.getByRole('link', { name: /start playing/i })
+    const href = await link.getAttribute('href')
     console.log('Start Playing href:', href)
-    expect(href).toMatch(/\/auth\/login|\/game/)
-    // And actually clicking should navigate
+    expect(href).toBe('/game')
+
     await Promise.all([
-      page.waitForURL(/\/auth\/login|\/game/, { timeout: 5_000 }),
-      page.getByRole('link', { name: /start playing/i }).click(),
+      page.waitForURL(/\/game/, { timeout: 10_000 }),
+      link.click(),
     ])
+    expect(page.url()).toMatch(/\/game$/)
   })
 
-  test('login page renders form', async ({ page }) => {
+  test('landing page shows "Sign in to save scores" link for guests', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByRole('link', { name: /sign in to save scores/i })).toBeVisible({
+      timeout: 10_000,
+    })
+  })
+
+  test('login page renders form and has "Play as guest" link', async ({ page }) => {
     await page.goto('/auth/login')
     await expect(page.locator('input[type="email"]').first()).toBeVisible({ timeout: 10_000 })
     await expect(page.locator('input[type="password"]').first()).toBeVisible()
+    await expect(page.getByRole('link', { name: /play as guest/i })).toBeVisible()
   })
 
-  test('register page renders form', async ({ page }) => {
+  test('register page renders form and has "Play as guest" link', async ({ page }) => {
     await page.goto('/auth/register')
     await expect(page.locator('input[type="email"]').first()).toBeVisible({ timeout: 10_000 })
     await expect(page.locator('input[type="password"]').first()).toBeVisible()
+    await expect(page.getByRole('link', { name: /play as guest/i })).toBeVisible()
+  })
+
+  test('guest can play without signing in', async ({ page }) => {
+    await page.goto('/game')
+    const canvas = page.locator('canvas').first()
+    await expect(canvas).toBeVisible({ timeout: 10_000 })
+    // Allow auth/me probe to resolve as 401, marking us as guest
+    await page.waitForTimeout(1000)
+    const main = page.locator('main[data-guest]').first()
+    const guest = await main.getAttribute('data-guest')
+    expect(guest).toBe('true')
   })
 
   test('game canvas loads and orbs eventually appear', async ({ page }) => {
@@ -73,6 +95,14 @@ test.describe.serial('Splitlings smoke', () => {
     const gameOver = /game over|supernova|final score/i.test(finalText)
     console.log('Initial score:', initialScore, 'Final score:', finalScore, 'Game over:', gameOver)
     expect(finalScore > initialScore || gameOver).toBe(true)
+  })
+
+  test('guest game over shows sign-in CTA, not score submission', async ({ page }) => {
+    // Hit the API directly to confirm guests get 401
+    const post = await page.request.post('/api/scores', {
+      data: { score: 100, wave: 1 },
+    })
+    expect(post.status()).toBe(401)
   })
 
   test('leaderboard page loads', async ({ page }) => {

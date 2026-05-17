@@ -158,7 +158,17 @@ export default function RegisterPage() {
           </p>
         </div>
 
-        <p className="mt-4 text-center text-xs" style={{ color: 'rgba(150,170,210,0.4)' }}>
+        <p className="mt-4 text-center text-sm" style={{ color: 'rgba(150,170,210,0.65)' }}>
+          <Link
+            href="/game"
+            className="hover:underline font-medium"
+            style={{ color: 'var(--primary)' }}
+          >
+            Play as guest →
+          </Link>
+        </p>
+
+        <p className="mt-3 text-center text-xs" style={{ color: 'rgba(150,170,210,0.4)' }}>
           <Link href="/" className="hover:underline">
             Back to Home
           </Link>

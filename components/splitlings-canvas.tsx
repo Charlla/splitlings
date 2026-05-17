@@ -18,6 +18,7 @@ import type { Orb, OrbColor } from '@/lib/splitlings-engine'
 interface SplitlingsCanvasProps {
   onGameOver: (score: number, wave: number) => void
   onScoreUpdate: (score: number, combo: number) => void
+  isGuest?: boolean
 }
 
 let nextId = 0
@@ -149,7 +150,7 @@ function drawHUD(
   }
 }
 
-export default function SplitlingsCanvas({ onGameOver, onScoreUpdate }: SplitlingsCanvasProps) {
+export default function SplitlingsCanvas({ onGameOver, onScoreUpdate, isGuest = false }: SplitlingsCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const stateRef = useRef({
     orbs: [] as Orb[],
@@ -470,6 +471,17 @@ export default function SplitlingsCanvas({ onGameOver, onScoreUpdate }: Splitlin
               <div className="text-4xl font-bold text-primary">{finalScore.toLocaleString()}</div>
               <div className="text-muted-foreground text-sm">Wave {finalWave}</div>
             </div>
+            {isGuest ? (
+              <a
+                href="/auth/login"
+                className="block w-full py-3 rounded-xl border border-primary/40 text-primary font-medium text-sm"
+                data-testid="signin-to-submit"
+              >
+                Sign in to submit your score →
+              </a>
+            ) : (
+              <p className="text-xs text-primary/80">Score submitted to leaderboard</p>
+            )}
             <button
               className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold"
               onClick={startGame}

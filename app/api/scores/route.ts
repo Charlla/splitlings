@@ -18,7 +18,13 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const session = await getSession()
-  // Allow unauthenticated score submission but don't link to a player
+  if (!session) {
+    return NextResponse.json(
+      { error: 'Sign in to submit your score' },
+      { status: 401 },
+    )
+  }
+
   const { score, wave } = await req.json()
 
   if (typeof score !== 'number' || score < 0) {
@@ -29,7 +35,7 @@ export async function POST(req: NextRequest) {
   const { data, error } = await db
     .from('splitlings_scores')
     .insert({
-      player_id: session?.id ?? null,
+      player_id: session.id,
       score: Math.round(score),
       wave: typeof wave === 'number' ? Math.round(wave) : 1,
     })

@@ -22,7 +22,7 @@ export default async function LandingPage() {
 
         <div className="mt-10 space-y-3">
           <Link
-            href={session ? '/game' : '/auth/login'}
+            href="/game"
             className="flex h-14 w-full items-center justify-center rounded-xl text-lg font-semibold transition-opacity hover:opacity-90"
             style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}
           >
@@ -80,8 +80,10 @@ export default async function LandingPage() {
         </div>
 
         {!session && (
-          <p className="mt-6 text-xs" style={{ color: 'rgba(150,170,210,0.4)' }}>
-            Sign in to save scores and compete globally
+          <p className="mt-6 text-xs" style={{ color: 'rgba(150,170,210,0.55)' }}>
+            <Link href="/auth/login" className="hover:underline" style={{ color: 'var(--primary)' }}>
+              Sign in to save scores →
+            </Link>
           </p>
         )}
         {session && (
