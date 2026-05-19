@@ -11,7 +11,9 @@ export { OTPRateLimitedError } from './otp-core'
 
 const APP_NAME = 'Splitlings'
 const BRAND = '#3aa8ff'
-const FROM = process.env.EMAIL_FROM ?? 'noreply@splitlings.com'
+// Use the verified Resend domain (botandbotty.com) for the default; splitlings.com
+// is not verified with Resend so sending from it silently fails.
+const FROM = process.env.EMAIL_FROM ?? 'Splitlings <noreply@botandbotty.com>'
 
 export async function sendOTPEmail(email: string, code: string): Promise<void> {
   const key = process.env.RESEND_API_KEY
