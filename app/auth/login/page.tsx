@@ -1,148 +1,135 @@
 'use client'
 
-import { useState, FormEvent } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
+type Step = 'email' | 'code'
+
 export default function LoginPage() {
   const router = useRouter()
+  const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [code, setCode] = useState('')
+  const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const codeRef = useRef<HTMLInputElement>(null)
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
+  useEffect(() => { if (step === 'code') codeRef.current?.focus() }, [step])
+
+  async function requestCode(e?: React.FormEvent) {
+    e?.preventDefault()
+    setError('')
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError('Please enter a valid email address.')
+      return
+    }
     setLoading(true)
-    setError(null)
-
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch('/api/auth/request-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: email.trim() }),
       })
       const data = await res.json()
-      if (!res.ok) {
-        setError(data.error ?? 'Login failed')
-        return
-      }
-      router.push('/game')
-    } catch {
-      setError('Network error — please try again')
-    } finally {
-      setLoading(false)
-    }
+      if (!res.ok) setError(data.error ?? 'Could not send code.')
+      else setStep('code')
+    } catch { setError('Network error.') }
+    finally { setLoading(false) }
+  }
+
+  async function verifyCode(e?: React.FormEvent) {
+    e?.preventDefault()
+    setError('')
+    if (!/^\d{6}$/.test(code)) { setError('Enter the 6-digit code.'); return }
+    setLoading(true)
+    try {
+      const res = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), code }),
+      })
+      const data = await res.json()
+      if (!res.ok) setError(data.error ?? 'Verification failed.')
+      else router.push('/')
+    } catch { setError('Network error.') }
+    finally { setLoading(false) }
   }
 
   return (
-    <main
-      className="flex min-h-svh flex-col items-center justify-center px-4"
-      style={{ background: 'hsl(230, 25%, 8%)' }}
-    >
+    <main className="flex min-h-svh items-center justify-center bg-game-deep px-4 text-game-ink">
       <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <Link href="/" className="text-4xl font-bold tracking-tight" style={{ color: 'var(--primary)' }}>
+        <div className="text-center mb-8">
+          <h1
+            className="select-none text-3xl font-extrabold leading-none tracking-tight"
+            style={{
+              background: 'linear-gradient(135deg, var(--game-accent) 0%, var(--game-accent-2) 100%)',
+              WebkitBackgroundClip: 'text',
+              backgroundClip: 'text',
+              color: 'transparent',
+            }}
+          >
             SPLITLINGS
-          </Link>
-          <p className="mt-2 text-sm" style={{ color: 'var(--muted-foreground)' }}>
-            Split the orbs!
-          </p>
+          </h1>
+          <p className="mt-2 text-[11px] font-mono uppercase tracking-[4px] text-game-ink-muted">Sign in</p>
         </div>
 
-        <div
-          className="rounded-2xl border p-6"
-          style={{ borderColor: 'rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)' }}
-        >
-          <h2 className="text-xl font-semibold mb-1" style={{ color: 'var(--foreground)' }}>
-            Welcome back
-          </h2>
-          <p className="text-sm mb-6" style={{ color: 'var(--muted-foreground)' }}>
-            Sign in to continue playing
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
+        {step === 'email' ? (
+          <form onSubmit={requestCode} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: 'var(--foreground)' }}>
-                Email
-              </label>
+              <label className="block text-xs uppercase tracking-[3px] text-game-ink-muted font-mono mb-2">Email</label>
               <input
-                type="email"
-                required
+                type="email" inputMode="email" autoComplete="email" autoFocus
                 value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="player@example.com"
-                className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition-colors"
-                style={{
-                  background: 'rgba(255,255,255,0.06)',
-                  borderColor: 'rgba(255,255,255,0.12)',
-                  color: 'var(--foreground)',
-                }}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full rounded-game-md border border-game-border bg-game-surface px-4 py-3 text-base text-game-ink outline-none placeholder:text-game-ink-faint focus:border-game-accent"
               />
             </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: 'var(--foreground)' }}>
-                Password
-              </label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition-colors"
-                style={{
-                  background: 'rgba(255,255,255,0.06)',
-                  borderColor: 'rgba(255,255,255,0.12)',
-                  color: 'var(--foreground)',
-                }}
-              />
-            </div>
-
-            {error && (
-              <p className="text-sm rounded-lg px-3 py-2" style={{ color: 'var(--destructive)', background: 'rgba(220,50,50,0.1)' }}>
-                {error}
-              </p>
-            )}
-
+            {error && <div className="rounded-game-sm bg-game-danger/15 text-game-danger px-3 py-2 text-xs">{error}</div>}
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 rounded-xl font-semibold text-sm transition-opacity hover:opacity-90 disabled:opacity-50"
-              style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}
+              className="w-full inline-flex items-center justify-center h-12 rounded-game-pill font-mono font-black uppercase tracking-[4px] text-sm text-game-deep shadow-game-glow-md disabled:opacity-60"
+              style={{ background: 'linear-gradient(135deg, var(--game-accent), color-mix(in oklab, var(--game-accent) 50%, var(--game-accent-2)))' }}
             >
-              {loading ? 'Signing in…' : 'Start Playing'}
+              {loading ? 'Sending…' : 'Send code'}
             </button>
+            <p className="mt-6 text-center text-xs text-game-ink-faint">
+              <Link href="/" className="hover:text-game-ink">← Back</Link>
+            </p>
           </form>
-
-          <p className="mt-4 text-center text-sm" style={{ color: 'var(--muted-foreground)' }}>
-            New player?{' '}
-            <Link href="/auth/register" className="font-medium underline underline-offset-4" style={{ color: 'var(--primary)' }}>
-              Create account
-            </Link>
-          </p>
-        </div>
-
-        <p className="mt-4 text-center text-sm" style={{ color: 'rgba(150,170,210,0.65)' }}>
-          <Link
-            href="/game"
-            className="hover:underline font-medium"
-            style={{ color: 'var(--primary)' }}
-          >
-            Play as guest →
-          </Link>
-        </p>
-
-        <p className="mt-3 text-center text-xs" style={{ color: 'rgba(150,170,210,0.4)' }}>
-          <Link href="/leaderboard" className="hover:underline">
-            View Leaderboard
-          </Link>
-          {' · '}
-          <Link href="/" className="hover:underline">
-            Back to Home
-          </Link>
-        </p>
+        ) : (
+          <form onSubmit={verifyCode} className="space-y-4">
+            <p className="text-center text-sm text-game-ink-muted">
+              We sent a 6-digit code to <span className="text-game-ink">{email}</span>
+            </p>
+            <div>
+              <label className="block text-xs uppercase tracking-[3px] text-game-ink-muted font-mono mb-2">Code</label>
+              <input
+                ref={codeRef}
+                type="text" inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" maxLength={6}
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="000000"
+                className="w-full rounded-game-md border border-game-border bg-game-surface px-4 py-3 text-center text-2xl font-mono tracking-[10px] text-game-ink outline-none placeholder:text-game-ink-faint focus:border-game-accent"
+              />
+            </div>
+            {error && <div className="rounded-game-sm bg-game-danger/15 text-game-danger px-3 py-2 text-xs">{error}</div>}
+            <button
+              type="submit"
+              disabled={loading || code.length !== 6}
+              className="w-full inline-flex items-center justify-center h-12 rounded-game-pill font-mono font-black uppercase tracking-[4px] text-sm text-game-deep shadow-game-glow-md disabled:opacity-60"
+              style={{ background: 'linear-gradient(135deg, var(--game-accent), color-mix(in oklab, var(--game-accent) 50%, var(--game-accent-2)))' }}
+            >
+              {loading ? 'Verifying…' : 'Verify & sign in'}
+            </button>
+            <div className="flex items-center justify-between text-xs">
+              <button type="button" onClick={() => { setStep('email'); setCode(''); setError('') }} className="text-game-ink-muted hover:text-game-ink">← Different email</button>
+              <button type="button" onClick={() => requestCode()} disabled={loading} className="text-game-accent hover:underline disabled:opacity-60">Resend code</button>
+            </div>
+          </form>
+        )}
       </div>
     </main>
   )
