@@ -422,9 +422,29 @@ export default function SplitlingsCanvas({ onGameOver, onScoreUpdate, isGuest = 
     }, 100)
   }, [startGame])
 
+  function openMenu() {
+    const s = stateRef.current
+    if (!s.started || s.gameOver) return
+    s.paused = true
+    s.showMenu = true
+    setOverlay('menu')
+  }
+
   return (
     <div className="relative w-full h-full">
       <canvas ref={canvasRef} className="absolute inset-0 touch-none" />
+
+      {/* Always-visible MENU button — pauses + opens overlay */}
+      {!overlay && (
+        <button
+          type="button"
+          onClick={openMenu}
+          aria-label="Open menu and pause"
+          className="absolute top-3 right-3 z-10 inline-flex items-center gap-1 rounded-md border border-game-border-strong bg-game-surface/85 backdrop-blur-sm px-3 py-1.5 text-[10px] font-mono font-bold tracking-[3px] uppercase text-game-ink hover:border-game-accent/60"
+        >
+          ≡ Menu
+        </button>
+      )}
 
       {/* Pause/Menu overlay */}
       {overlay === 'menu' && (
@@ -501,7 +521,7 @@ export default function SplitlingsCanvas({ onGameOver, onScoreUpdate, isGuest = 
       {/* Touch hint — shown briefly */}
       {!overlay && (
         <div className="absolute bottom-6 left-0 right-0 text-center pointer-events-none">
-          <p className="text-xs text-white/30">Tap orbs to split · Hold anywhere for menu</p>
+          <p className="text-xs text-white/30">Tap orbs to split · Tap ≡ Menu to pause</p>
         </div>
       )}
     </div>
