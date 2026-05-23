@@ -6,6 +6,25 @@ const nextConfig: NextConfig = {
     // nothing special needed — standard App Router
   },
   async headers() {
+    // CSP ported from NC (audit #139 / phase 8 part 6). Report-Only for the
+    // first week of clean reports, then flip to enforced. Game-specific:
+    //   connect-src — wss://*.supabase.co for Realtime (if used)
+    //   (no PayFast, no Sentry, no AI Gateway — games don't take money or LLM-gen)
+    const csp = [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      "style-src 'self' 'unsafe-inline' fonts.googleapis.com",
+      "font-src 'self' fonts.gstatic.com data:",
+      "img-src 'self' data: blob: https:",
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+      "frame-src 'self'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "frame-ancestors 'self'",
+      "object-src 'none'",
+      'upgrade-insecure-requests',
+    ].join('; ')
+
     return [
       {
         source: '/:path*',
@@ -16,6 +35,7 @@ const nextConfig: NextConfig = {
           { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=(), interest-cohort=()' },
           { key: 'X-DNS-Prefetch-Control', value: 'on' },
+          { key: 'Content-Security-Policy-Report-Only', value: csp },
         ],
       },
     ]
