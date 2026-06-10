@@ -70,19 +70,23 @@ export default async function LandingPage() {
             </li>
             <li className="flex items-start gap-2">
               <span className="text-game-accent font-bold">2.</span>
-              <span>Chain same colors for combo multipliers</span>
+              <span>Same colors merge — the bigger orb eats the smaller</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-game-accent font-bold">3.</span>
-              <span>Manage your energy bar wisely</span>
+              <span>Everything keeps growing — chain colors for combos</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-game-accent font-bold">4.</span>
+              <span>Manage your energy bar wisely</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-game-accent font-bold">5.</span>
               <span className="text-game-ink font-medium">Tap and hold anywhere for menu</span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="text-game-danger font-bold">5.</span>
-              <span>Don&apos;t let orbs reach supernova size!</span>
+              <span className="text-game-danger font-bold">6.</span>
+              <span>Don&apos;t let any orb reach supernova size!</span>
             </li>
           </ul>
         </div>

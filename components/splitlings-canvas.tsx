@@ -6,14 +6,23 @@ import { PauseOverlay, GameOverScreen, NeonButton } from '@/components/games'
 import {
   ORB_COLORS,
   SUPERNOVA_RADIUS,
-  MIN_SPLIT_RADIUS,
+  START_RADIUS_MIN,
+  START_RADIUS_MAX,
+  START_SPEED,
   ENERGY_MAX,
   ENERGY_SPLIT_COST,
   ENERGY_RECHARGE_RATE,
-  INITIAL_ORB_COUNT,
   MAX_ORB_COUNT,
   GROWTH_RATE_BASE,
+  WAVE_GROWTH_RAMP,
+  WAVE_DURATION_FRAMES,
+  SPLIT_COUNT,
+  SPLIT_RADIUS_FACTOR,
+  MIN_FRAGMENT_RADIUS,
   SPLIT_VELOCITY_BOOST,
+  EAT_IMMUNITY_FRAMES,
+  ABSORB_POINTS_PER_RADIUS,
+  absorbedRadius,
   colorIndex,
 } from '@/lib/splitlings-engine'
 import type { Orb, OrbColor } from '@/lib/splitlings-engine'
@@ -37,22 +46,32 @@ function makeOrb(x: number, y: number, r: number, vx: number, vy: number, color:
   return { id: nextId++, x, y, vx, vy, r, color, pulse: Math.random() * Math.PI * 2, age: 0 }
 }
 
-function spawnOrbs(count: number, width: number, height: number): Orb[] {
-  const orbs: Orb[] = []
-  for (let i = 0; i < count; i++) {
-    const color = ORB_COLORS[Math.floor(Math.random() * ORB_COLORS.length)]
-    const r = 18 + Math.random() * 22
-    const margin = r + 10
-    orbs.push(makeOrb(
-      margin + Math.random() * (width - 2 * margin),
-      margin + Math.random() * (height - 2 * margin),
+/**
+ * Start state: exactly ONE orb per color, laid out on a jittered 2×3 grid so
+ * they never spawn overlapping. Population only changes through splitting
+ * (player) and absorption (same-color eat) — nothing else spawns orbs.
+ */
+function spawnInitialOrbs(width: number, height: number): Orb[] {
+  const cols = 2
+  const rows = Math.ceil(ORB_COLORS.length / cols)
+  const cellW = width / cols
+  const cellH = height / rows
+  return ORB_COLORS.map((color, i) => {
+    const r = START_RADIUS_MIN + Math.random() * (START_RADIUS_MAX - START_RADIUS_MIN)
+    const col = i % cols
+    const row = Math.floor(i / cols)
+    const jitterX = (Math.random() - 0.5) * (cellW - 2 * (r + 12))
+    const jitterY = (Math.random() - 0.5) * (cellH - 2 * (r + 12))
+    const angle = Math.random() * Math.PI * 2
+    return makeOrb(
+      (col + 0.5) * cellW + jitterX,
+      (row + 0.5) * cellH + jitterY,
       r,
-      (Math.random() - 0.5) * 1.2,
-      (Math.random() - 0.5) * 1.2,
+      Math.cos(angle) * START_SPEED,
+      Math.sin(angle) * START_SPEED,
       color,
-    ))
-  }
-  return orbs
+    )
+  })
 }
 
 function drawOrb(ctx: CanvasRenderingContext2D, orb: Orb) {
@@ -212,7 +231,7 @@ export default function SplitlingsCanvas({
     const s = stateRef.current
     const canvas = canvasRef.current
     if (!canvas) return
-    s.orbs = spawnOrbs(INITIAL_ORB_COUNT, s.width, s.height)
+    s.orbs = spawnInitialOrbs(s.width, s.height)
     s.score = 0
     s.wave = 1
     s.energy = ENERGY_MAX
@@ -247,7 +266,20 @@ export default function SplitlingsCanvas({
       return Math.sqrt(dx * dx + dy * dy) <= o.r + 8
     })
     if (!hit) return
-    if (hit.r < MIN_SPLIT_RADIUS) return
+    const newR = hit.r * SPLIT_RADIUS_FACTOR
+    if (newR < MIN_FRAGMENT_RADIUS) {
+      // too small to split — a color can never be eliminated from the board
+      s.splashTexts.push({
+        x: cx, y: cy - 20, text: 'TOO SMALL', alpha: 1, vy: -0.8, color: 'rgba(255,255,255,0.7)',
+      })
+      return
+    }
+    if (s.orbs.length - 1 + SPLIT_COUNT > MAX_ORB_COUNT) {
+      s.splashTexts.push({
+        x: cx, y: cy - 20, text: 'TOO CROWDED', alpha: 1, vy: -0.8, color: 'hsl(0,90%,60%)',
+      })
+      return
+    }
     if (s.energy < ENERGY_SPLIT_COST) {
       // feedback instead of silently swallowing the tap
       s.splashTexts.push({
@@ -282,16 +314,15 @@ export default function SplitlingsCanvas({
       color: s.combo > 2 ? 'hsl(55,90%,60%)' : 'rgba(255,255,255,0.9)',
     })
 
-    // split the orb
-    const newR = hit.r * 0.62
-    const angle = Math.atan2(cy - hit.y, cx - hit.x) + Math.PI / 2
+    // split the orb into SPLIT_COUNT fragments fanned out from the tap angle.
+    // Fragments are eat-immune for a moment (age-based) so they escape before
+    // same-color absorption starts pulling them back together.
+    const baseAngle = Math.atan2(cy - hit.y, cx - hit.x) + Math.PI / 2
     const spd = SPLIT_VELOCITY_BOOST
-    const o1 = makeOrb(hit.x, hit.y, newR, Math.cos(angle) * spd, Math.sin(angle) * spd, hit.color)
-    const o2 = makeOrb(hit.x, hit.y, newR, -Math.cos(angle) * spd, -Math.sin(angle) * spd, hit.color)
-
     s.orbs = s.orbs.filter(o => o.id !== hit.id)
-    if (newR >= MIN_SPLIT_RADIUS) {
-      s.orbs.push(o1, o2)
+    for (let i = 0; i < SPLIT_COUNT; i++) {
+      const a = baseAngle + (i * Math.PI * 2) / SPLIT_COUNT
+      s.orbs.push(makeOrb(hit.x, hit.y, newR, Math.cos(a) * spd, Math.sin(a) * spd, hit.color))
     }
   }, [onScoreUpdate])
 
@@ -339,23 +370,19 @@ export default function SplitlingsCanvas({
         // recharge energy
         s.energy = Math.min(ENERGY_MAX, s.energy + ENERGY_RECHARGE_RATE * dt)
 
-        // wave timer — add new orbs every 15 seconds of surviving
+        // wave timer — pure difficulty tick (growth speeds up each wave).
+        // No orbs are ever spawned: population only changes via splits + eats.
         s.waveTimer += dt
-        if (s.waveTimer >= 60 * 15) {
+        if (s.waveTimer >= WAVE_DURATION_FRAMES) {
           s.waveTimer = 0
           s.wave++
-          const newCount = Math.min(3, Math.floor(s.wave / 2) + 1)
-          if (s.orbs.length + newCount <= MAX_ORB_COUNT) {
-            s.orbs.push(...spawnOrbs(newCount, width, height))
-          }
         }
 
-        // update orbs
-        let dead = false
+        // update orbs — everything grows, all the time
+        const growthRate = GROWTH_RATE_BASE * (1 + (s.wave - 1) * WAVE_GROWTH_RAMP)
         for (const orb of s.orbs) {
           orb.age += dt
           orb.pulse += 0.022 * dt
-          const growthRate = GROWTH_RATE_BASE * (1 + (s.wave - 1) * 0.1)
           orb.r += growthRate * dt
           orb.x += orb.vx * dt
           orb.y += orb.vy * dt
@@ -365,11 +392,54 @@ export default function SplitlingsCanvas({
           if (orb.x + orb.r > width) { orb.x = width - orb.r; orb.vx = -Math.abs(orb.vx) }
           if (orb.y - orb.r < 0) { orb.y = orb.r; orb.vy = Math.abs(orb.vy) }
           if (orb.y + orb.r > height) { orb.y = height - orb.r; orb.vy = -Math.abs(orb.vy) }
-
-          if (orb.r >= SUPERNOVA_RADIUS) dead = true
         }
 
-        if (dead) triggerGameOver()
+        // same-color absorption — the larger orb eats the smaller when the
+        // smaller's centre is inside it. Mass is conserved (area-additive),
+        // so split fragments cascade back into bigger orbs over time.
+        // Different colors pass through each other untouched.
+        const eaten = new Set<number>()
+        for (let i = 0; i < s.orbs.length; i++) {
+          const a = s.orbs[i]
+          if (eaten.has(a.id)) continue
+          for (let j = i + 1; j < s.orbs.length; j++) {
+            const b = s.orbs[j]
+            if (eaten.has(b.id)) continue
+            if (a.color.h !== b.color.h) continue
+            const big = a.r >= b.r ? a : b
+            const small = big === a ? b : a
+            if (small.age < EAT_IMMUNITY_FRAMES) continue
+            const dx = a.x - b.x, dy = a.y - b.y
+            if (dx * dx + dy * dy >= big.r * big.r) continue
+
+            // eat: area-conserving growth + momentum-weighted velocity blend
+            const mBig = big.r * big.r
+            const mSmall = small.r * small.r
+            big.vx = (big.vx * mBig + small.vx * mSmall) / (mBig + mSmall)
+            big.vy = (big.vy * mBig + small.vy * mSmall) / (mBig + mSmall)
+            big.r = absorbedRadius(big.r, small.r)
+            eaten.add(small.id)
+
+            const points = Math.round(small.r * ABSORB_POINTS_PER_RADIUS)
+            s.score += points
+            onScoreUpdate(s.score, s.combo)
+            s.splashTexts.push({
+              x: small.x,
+              y: small.y - small.r,
+              text: `+${points}`,
+              alpha: 1,
+              vy: -1,
+              color: `hsla(${big.color.h},${big.color.s}%,${Math.min(big.color.l + 15, 80)}%,0.9)`,
+            })
+            if (eaten.has(a.id)) break
+          }
+        }
+        if (eaten.size > 0) {
+          s.orbs = s.orbs.filter(o => !eaten.has(o.id))
+        }
+
+        // supernova check after absorption (eating can push an orb over)
+        if (s.orbs.some(o => o.r >= SUPERNOVA_RADIUS)) triggerGameOver()
       }
 
       // draw (always — keeps the frozen scene visible under pause/game-over)
@@ -455,7 +525,7 @@ export default function SplitlingsCanvas({
       canvas.removeEventListener('pointercancel', onPointerCancel)
       document.removeEventListener('visibilitychange', onVisibility)
     }
-  }, [handleTap, triggerGameOver, openPauseMenu])
+  }, [handleTap, triggerGameOver, openPauseMenu, onScoreUpdate])
 
   // Start the game on mount
   useEffect(() => {
@@ -566,7 +636,7 @@ export default function SplitlingsCanvas({
           className="pointer-events-none absolute left-0 right-0 text-center"
           style={{ bottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }}
         >
-          <p className="text-xs text-white/30">Tap orbs to split · Hold or tap ≡ Menu to pause</p>
+          <p className="text-xs text-white/30">Tap to split · Same colors merge · Hold for menu</p>
         </div>
       )}
     </div>

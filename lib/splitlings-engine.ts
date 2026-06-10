@@ -1,4 +1,18 @@
 // Splitlings game engine types and constants
+//
+// Core loop (original design, restored 2026-06-10):
+//   1. Every orb GROWS steadily over time — all orbs, all the time.
+//   2. Same-color collision: the LARGER orb EATS the smaller one and absorbs
+//      its mass (area-conserving: r = sqrt(rL² + rS²)).
+//   3. Tapping an orb SPLITS it into fragments. Fragments keep growing, and
+//      same-color absorption cascades them back into bigger orbs — no new
+//      orbs are ever spawned into the game.
+//   4. The board starts with exactly ONE orb of each color. Population only
+//      changes through splitting (player action) and absorption (eat).
+//   Different-color orbs drift through each other (no collision).
+//   Game over: any orb reaches SUPERNOVA_RADIUS.
+//
+// All per-frame values assume 60fps frame units (the loop normalises dt).
 
 export interface OrbColor {
   h: number
@@ -39,15 +53,40 @@ export const ORB_COLORS: OrbColor[] = [
   { h: 275, s: 80, l: 65 }, // purple
 ]
 
-export const SUPERNOVA_RADIUS = 80
-export const MIN_SPLIT_RADIUS = 10
+// ── Start state — exactly one orb per color ─────────────────────────────
+export const START_RADIUS_MIN = 16
+export const START_RADIUS_MAX = 22
+export const START_SPEED = 0.9 // px/frame drift
+
+// ── Growth ──────────────────────────────────────────────────────────────
+export const GROWTH_RATE_BASE = 0.018  // radius px/frame (~1.1 px/s at wave 1)
+export const WAVE_GROWTH_RAMP = 0.12   // +12% growth per wave survived
+export const WAVE_DURATION_FRAMES = 60 * 15 // a "wave" = 15s survived (difficulty tick only — spawns nothing)
+
+// ── Splitting (tap) ─────────────────────────────────────────────────────
+export const SPLIT_COUNT = 3           // fragments per pop
+export const SPLIT_RADIUS_FACTOR = 0.5 // fragment r = 0.5r → ~25% of area vented per split
+export const MIN_FRAGMENT_RADIUS = 9   // refuse the split if fragments would be smaller (a color can never vanish)
+export const SPLIT_VELOCITY_BOOST = 2.5
+export const MAX_ORB_COUNT = 28        // splits refused beyond this (absorption brings the count back down)
+
+// ── Absorption (same-color eat) ─────────────────────────────────────────
+// The larger orb eats the smaller when the smaller's centre is inside it.
+export const EAT_IMMUNITY_FRAMES = 50      // fresh fragments can't be eaten for ~0.8s (lets a split actually escape)
+export const ABSORB_POINTS_PER_RADIUS = 4  // passive cascade points = round(rSmall × this)
+
+/** Area-conserving absorption: the eater's new radius. */
+export function absorbedRadius(rLarge: number, rSmall: number): number {
+  return Math.sqrt(rLarge * rLarge + rSmall * rSmall)
+}
+
+// ── Energy ──────────────────────────────────────────────────────────────
 export const ENERGY_MAX = 100
 export const ENERGY_SPLIT_COST = 8
 export const ENERGY_RECHARGE_RATE = 0.12 // per frame
-export const INITIAL_ORB_COUNT = 5
-export const MAX_ORB_COUNT = 30
-export const GROWTH_RATE_BASE = 0.018 // radius per frame
-export const SPLIT_VELOCITY_BOOST = 2.5
+
+// ── Death ───────────────────────────────────────────────────────────────
+export const SUPERNOVA_RADIUS = 80
 
 export function colorIndex(color: OrbColor): number {
   return ORB_COLORS.findIndex(c => c.h === color.h && c.s === color.s && c.l === color.l)
