@@ -1,16 +1,16 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
-import SplitlingsCanvas from '@/components/splitlings-canvas'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import SplitlingsCanvas, { type ScoreSubmitState } from '@/components/splitlings-canvas'
 import Link from 'next/link'
 
 export default function GamePage() {
   const [score, setScore] = useState(0)
   const [combo, setCombo] = useState(0)
-  const [submitting, setSubmitting] = useState(false)
-  const [submitted, setSubmitted] = useState(false)
+  const [submitState, setSubmitState] = useState<ScoreSubmitState>('idle')
   const [isGuest, setIsGuest] = useState<boolean | null>(null)
   const [username, setUsername] = useState<string | null>(null)
+  const lastRunRef = useRef<{ score: number; wave: number } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -39,26 +39,38 @@ export default function GamePage() {
     setCombo(c)
   }, [])
 
+  const submitScore = useCallback(async (finalScore: number, finalWave: number) => {
+    setSubmitState('saving')
+    try {
+      const res = await fetch('/api/scores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ score: finalScore, wave: finalWave }),
+      })
+      setSubmitState(res.ok ? 'saved' : 'error')
+    } catch {
+      setSubmitState('error')
+    }
+  }, [])
+
   const handleGameOver = useCallback(
-    async (finalScore: number, finalWave: number) => {
+    (finalScore: number, finalWave: number) => {
+      lastRunRef.current = { score: finalScore, wave: finalWave }
       if (finalScore <= 0) return
       if (isGuest !== false) return // only submit if confirmed logged in
-      setSubmitting(true)
-      try {
-        const res = await fetch('/api/scores', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ score: finalScore, wave: finalWave }),
-        })
-        if (res.ok) setSubmitted(true)
-      } catch {
-        // best-effort
-      } finally {
-        setSubmitting(false)
-      }
+      void submitScore(finalScore, finalWave)
     },
-    [isGuest],
+    [isGuest, submitScore],
   )
+
+  const handleRetrySubmit = useCallback(() => {
+    const run = lastRunRef.current
+    if (run && run.score > 0) void submitScore(run.score, run.wave)
+  }, [submitScore])
+
+  const handleRestart = useCallback(() => {
+    setSubmitState('idle')
+  }, [])
 
   return (
     <main
@@ -68,39 +80,29 @@ export default function GamePage() {
       data-combo={combo}
       data-guest={isGuest === true ? 'true' : isGuest === false ? 'false' : 'unknown'}
     >
-      {/* Top nav bar */}
-      <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-4 py-2 pointer-events-none">
-        <Link
-          href="/"
-          className="pointer-events-auto text-xs font-bold tracking-widest opacity-50 hover:opacity-80 transition-opacity"
-          style={{ color: 'var(--primary)' }}
-        >
-          SPLITLINGS
-        </Link>
-        <div className="flex items-center gap-3 pointer-events-auto">
+      {/* Top nav bar — left cluster only; the canvas Menu button owns the right side */}
+      <div
+        className="pointer-events-none absolute left-0 right-0 top-0 z-20 flex items-center px-4"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4px)' }}
+      >
+        <div className="flex min-w-0 items-center gap-3">
+          <Link
+            href="/"
+            aria-label="Back to Splitlings home"
+            className="pointer-events-auto inline-flex min-h-11 items-center font-mono text-xs font-bold tracking-widest text-game-accent/60 transition-colors hover:text-game-accent"
+          >
+            SPLITLINGS
+          </Link>
           {username && (
-            <span className="text-xs opacity-60" style={{ color: 'var(--muted-foreground)' }}>
-              {username}
-            </span>
+            <span className="max-w-[40vw] truncate text-xs text-game-ink-faint">{username}</span>
           )}
           {isGuest === true && (
             <Link
-              href="/auth/login"
-              className="text-xs opacity-60 hover:opacity-90 underline underline-offset-2"
-              style={{ color: 'var(--primary)' }}
+              href="/auth/login?next=/game"
+              className="pointer-events-auto inline-flex min-h-11 items-center text-xs text-game-accent/80 underline underline-offset-2 hover:text-game-accent"
             >
               Sign in
             </Link>
-          )}
-          {submitting && (
-            <span className="text-xs opacity-50" style={{ color: 'var(--muted-foreground)' }}>
-              Saving…
-            </span>
-          )}
-          {submitted && !submitting && (
-            <span className="text-xs" style={{ color: 'var(--primary)' }}>
-              Score saved!
-            </span>
           )}
         </div>
       </div>
@@ -108,7 +110,10 @@ export default function GamePage() {
       <SplitlingsCanvas
         onGameOver={handleGameOver}
         onScoreUpdate={handleScoreUpdate}
+        onRestart={handleRestart}
         isGuest={isGuest === true}
+        submitState={submitState}
+        onRetrySubmit={handleRetrySubmit}
       />
     </main>
   )

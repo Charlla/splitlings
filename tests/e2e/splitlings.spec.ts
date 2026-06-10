@@ -35,18 +35,17 @@ test.describe.serial('Splitlings smoke', () => {
     })
   })
 
-  test('login page renders form and has "Play as guest" link', async ({ page }) => {
+  test('login page renders OTP form (email only, no password)', async ({ page }) => {
     await page.goto('/auth/login')
     await expect(page.locator('input[type="email"]').first()).toBeVisible({ timeout: 10_000 })
-    await expect(page.locator('input[type="password"]').first()).toBeVisible()
-    await expect(page.getByRole('link', { name: /play as guest/i })).toBeVisible()
+    await expect(page.locator('input[type="password"]')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /send code/i })).toBeVisible()
   })
 
-  test('register page renders form and has "Play as guest" link', async ({ page }) => {
+  test('register page redirects to OTP login', async ({ page }) => {
     await page.goto('/auth/register')
-    await expect(page.locator('input[type="email"]').first()).toBeVisible({ timeout: 10_000 })
-    await expect(page.locator('input[type="password"]').first()).toBeVisible()
-    await expect(page.getByRole('link', { name: /play as guest/i })).toBeVisible()
+    await page.waitForURL(/\/auth\/login/, { timeout: 10_000 })
+    await expect(page.locator('input[type="email"]').first()).toBeVisible()
   })
 
   test('guest can play without signing in', async ({ page }) => {

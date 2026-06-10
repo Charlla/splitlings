@@ -38,7 +38,7 @@ export default async function LeaderboardPage() {
           </Link>
           <Link
             href="/game"
-            className="px-4 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-80"
+            className="inline-flex min-h-11 items-center px-4 rounded-lg text-sm font-medium transition-opacity hover:opacity-80"
             style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}
           >
             Play

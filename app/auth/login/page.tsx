@@ -1,14 +1,22 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useRef, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { HumanVerify } from '@/components/games/HumanVerify'
 
 type Step = 'email' | 'code'
 
-export default function LoginPage() {
+/** Only allow same-origin relative paths as post-login destinations. */
+function safeNext(raw: string | null): string {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return '/'
+  return raw
+}
+
+function LoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const next = safeNext(searchParams.get('next'))
   const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
@@ -54,7 +62,7 @@ export default function LoginPage() {
       })
       const data = await res.json()
       if (!res.ok) setError(data.error ?? 'Verification failed.')
-      else router.push('/')
+      else router.push(next)
     } catch { setError('Network error.') }
     finally { setLoading(false) }
   }
@@ -130,12 +138,21 @@ export default function LoginPage() {
               {loading ? 'Verifying…' : 'Verify & sign in'}
             </button>
             <div className="flex items-center justify-between text-xs">
-              <button type="button" onClick={() => { setStep('email'); setCode(''); setError('') }} className="text-game-ink-muted hover:text-game-ink">← Different email</button>
-              <button type="button" onClick={() => requestCode()} disabled={loading} className="text-game-accent hover:underline disabled:opacity-60">Resend code</button>
+              <button type="button" onClick={() => { setStep('email'); setCode(''); setError('') }} className="inline-flex min-h-11 items-center text-game-ink-muted hover:text-game-ink">← Different email</button>
+              <button type="button" onClick={() => requestCode()} disabled={loading} className="inline-flex min-h-11 items-center text-game-accent hover:underline disabled:opacity-60">Resend code</button>
             </div>
           </form>
         )}
       </div>
     </main>
+  )
+}
+
+export default function LoginPage() {
+  // useSearchParams requires a Suspense boundary for prerendering
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   )
 }

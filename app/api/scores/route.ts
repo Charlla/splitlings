@@ -25,10 +25,30 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const { score, wave } = await req.json()
+  const body = await req.json().catch(() => null)
+  const rawScore = body?.score
+  const rawWave = body?.wave ?? 1
 
-  if (typeof score !== 'number' || score < 0) {
+  // Sanity bounds. Theoretical max ≈ 25 splits/wave × 4 800 pts/split ≈ 120k
+  // per 15s wave (energy-limited) — real play is far below. Anything outside
+  // these envelopes is a forged payload, not a game.
+  const MAX_WAVE = 500
+  const MAX_SCORE = 5_000_000
+  const MAX_PER_WAVE = 150_000
+
+  if (typeof rawScore !== 'number' || !Number.isFinite(rawScore) || rawScore <= 0) {
     return NextResponse.json({ error: 'Invalid score' }, { status: 400 })
+  }
+  if (typeof rawWave !== 'number' || !Number.isFinite(rawWave)) {
+    return NextResponse.json({ error: 'Invalid wave' }, { status: 400 })
+  }
+  const score = Math.round(rawScore)
+  const wave = Math.round(rawWave)
+  if (wave < 1 || wave > MAX_WAVE) {
+    return NextResponse.json({ error: 'Invalid wave' }, { status: 400 })
+  }
+  if (score > MAX_SCORE || score > wave * MAX_PER_WAVE) {
+    return NextResponse.json({ error: 'Score failed validation' }, { status: 400 })
   }
 
   const db = getServiceClient()
@@ -36,8 +56,8 @@ export async function POST(req: NextRequest) {
     .from('splitlings_scores')
     .insert({
       player_id: session.id,
-      score: Math.round(score),
-      wave: typeof wave === 'number' ? Math.round(wave) : 1,
+      score,
+      wave,
     })
     .select('id, score, wave')
     .single()

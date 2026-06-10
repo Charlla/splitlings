@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useCallback, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { PauseOverlay, GameOverScreen, NeonButton } from '@/components/games'
 import {
   ORB_COLORS,
   SUPERNOVA_RADIUS,
@@ -9,16 +11,24 @@ import {
   ENERGY_SPLIT_COST,
   ENERGY_RECHARGE_RATE,
   INITIAL_ORB_COUNT,
+  MAX_ORB_COUNT,
   GROWTH_RATE_BASE,
   SPLIT_VELOCITY_BOOST,
   colorIndex,
 } from '@/lib/splitlings-engine'
 import type { Orb, OrbColor } from '@/lib/splitlings-engine'
 
+export type ScoreSubmitState = 'idle' | 'saving' | 'saved' | 'error'
+
 interface SplitlingsCanvasProps {
   onGameOver: (score: number, wave: number) => void
   onScoreUpdate: (score: number, combo: number) => void
+  /** Called when a new round starts (Play Again / New Game). */
+  onRestart?: () => void
   isGuest?: boolean
+  /** Score submission status, surfaced on the game-over screen. */
+  submitState?: ScoreSubmitState
+  onRetrySubmit?: () => void
 }
 
 let nextId = 0
@@ -88,39 +98,6 @@ function drawOrb(ctx: CanvasRenderingContext2D, orb: Orb) {
   }
 }
 
-function drawEnergyBar(ctx: CanvasRenderingContext2D, energy: number, width: number) {
-  const barW = Math.min(width - 32, 320)
-  const barH = 10
-  const bx = (width - barW) / 2
-  const by = 16
-
-  // track
-  ctx.fillStyle = 'rgba(255,255,255,0.1)'
-  ctx.beginPath()
-  ctx.roundRect(bx, by, barW, barH, 5)
-  ctx.fill()
-
-  // fill
-  const pct = energy / ENERGY_MAX
-  const energyColor = pct > 0.4
-    ? `hsl(160,80%,50%)`
-    : pct > 0.2
-      ? `hsl(45,90%,55%)`
-      : `hsl(0,90%,55%)`
-
-  if (pct > 0) {
-    ctx.fillStyle = energyColor
-    ctx.beginPath()
-    ctx.roundRect(bx, by, barW * pct, barH, 5)
-    ctx.fill()
-  }
-
-  ctx.fillStyle = 'rgba(255,255,255,0.6)'
-  ctx.font = 'bold 10px sans-serif'
-  ctx.textAlign = 'left'
-  ctx.fillText('ENERGY', bx, by - 3)
-}
-
 function drawHUD(
   ctx: CanvasRenderingContext2D,
   score: number,
@@ -128,29 +105,64 @@ function drawHUD(
   combo: number,
   energy: number,
   width: number,
+  top: number,
 ) {
-  drawEnergyBar(ctx, energy, width)
+  // energy bar — left-aligned so it never collides with the right-side score
+  const barW = Math.min(width * 0.45, 220)
+  const barH = 10
+  const bx = 16
+  const by = top + 14
 
-  // score top-right
+  ctx.fillStyle = 'rgba(255,255,255,0.6)'
+  ctx.font = 'bold 10px monospace'
+  ctx.textAlign = 'left'
+  ctx.fillText('ENERGY', bx, top + 9)
+
+  ctx.fillStyle = 'rgba(255,255,255,0.1)'
+  ctx.beginPath()
+  ctx.roundRect(bx, by, barW, barH, 5)
+  ctx.fill()
+
+  const pct = energy / ENERGY_MAX
+  if (pct > 0) {
+    ctx.fillStyle = pct > 0.4
+      ? 'hsl(160,80%,50%)'
+      : pct > 0.2
+        ? 'hsl(45,90%,55%)'
+        : 'hsl(0,90%,55%)'
+    ctx.beginPath()
+    ctx.roundRect(bx, by, barW * pct, barH, 5)
+    ctx.fill()
+  }
+
+  // score — top-right, below the Menu button row
   ctx.textAlign = 'right'
   ctx.fillStyle = 'rgba(255,255,255,0.9)'
   ctx.font = 'bold 22px monospace'
-  ctx.fillText(score.toLocaleString(), width - 16, 30)
+  ctx.fillText(score.toLocaleString(), width - 16, top + 24)
 
-  ctx.font = '11px sans-serif'
+  ctx.font = '11px monospace'
   ctx.fillStyle = 'rgba(255,255,255,0.5)'
-  ctx.fillText(`WAVE ${wave}`, width - 16, 46)
+  ctx.fillText(`WAVE ${wave}`, width - 16, top + 40)
 
-  // combo
+  // combo — under the energy bar
   if (combo > 1) {
     ctx.textAlign = 'left'
     ctx.font = `bold ${18 + Math.min(combo * 2, 16)}px sans-serif`
-    ctx.fillStyle = `hsl(55,90%,60%)`
-    ctx.fillText(`×${combo} COMBO`, 16, 48)
+    ctx.fillStyle = 'hsl(55,90%,60%)'
+    ctx.fillText(`×${combo} COMBO`, 16, by + barH + 28)
   }
 }
 
-export default function SplitlingsCanvas({ onGameOver, onScoreUpdate, isGuest = false }: SplitlingsCanvasProps) {
+export default function SplitlingsCanvas({
+  onGameOver,
+  onScoreUpdate,
+  onRestart,
+  isGuest = false,
+  submitState = 'idle',
+  onRetrySubmit,
+}: SplitlingsCanvasProps) {
+  const router = useRouter()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const stateRef = useRef({
     orbs: [] as Orb[],
@@ -167,6 +179,7 @@ export default function SplitlingsCanvas({ onGameOver, onScoreUpdate, isGuest = 
     showMenu: false,
     width: 0,
     height: 0,
+    hudTop: 56,
     raf: 0,
     waveTimer: 0,
     splashTexts: [] as { x: number; y: number; text: string; alpha: number; vy: number; color: string }[],
@@ -175,6 +188,16 @@ export default function SplitlingsCanvas({ onGameOver, onScoreUpdate, isGuest = 
   const [overlay, setOverlay] = useState<'menu' | 'gameover' | null>(null)
   const [finalScore, setFinalScore] = useState(0)
   const [finalWave, setFinalWave] = useState(1)
+  const [pauseStats, setPauseStats] = useState({ score: 0, wave: 1 })
+
+  const openPauseMenu = useCallback(() => {
+    const s = stateRef.current
+    if (!s.started || s.gameOver || s.showMenu) return
+    s.paused = true
+    s.showMenu = true
+    setPauseStats({ score: s.score, wave: s.wave })
+    setOverlay('menu')
+  }, [])
 
   const triggerGameOver = useCallback(() => {
     const s = stateRef.current
@@ -182,7 +205,6 @@ export default function SplitlingsCanvas({ onGameOver, onScoreUpdate, isGuest = 
     setFinalScore(s.score)
     setFinalWave(s.wave)
     setOverlay('gameover')
-    cancelAnimationFrame(s.raf)
     onGameOver(s.score, s.wave)
   }, [onGameOver])
 
@@ -203,6 +225,15 @@ export default function SplitlingsCanvas({ onGameOver, onScoreUpdate, isGuest = 
     s.waveTimer = 0
     s.splashTexts = []
     setOverlay(null)
+    onScoreUpdate(0, 0)
+    onRestart?.()
+  }, [onScoreUpdate, onRestart])
+
+  const resumeGame = useCallback(() => {
+    const s = stateRef.current
+    s.showMenu = false
+    s.paused = false
+    setOverlay(null)
   }, [])
 
   const handleTap = useCallback((cx: number, cy: number) => {
@@ -216,8 +247,14 @@ export default function SplitlingsCanvas({ onGameOver, onScoreUpdate, isGuest = 
       return Math.sqrt(dx * dx + dy * dy) <= o.r + 8
     })
     if (!hit) return
-    if (s.energy < ENERGY_SPLIT_COST) return
     if (hit.r < MIN_SPLIT_RADIUS) return
+    if (s.energy < ENERGY_SPLIT_COST) {
+      // feedback instead of silently swallowing the tap
+      s.splashTexts.push({
+        x: cx, y: cy - 20, text: 'LOW ENERGY', alpha: 1, vy: -0.8, color: 'hsl(0,90%,60%)',
+      })
+      return
+    }
 
     s.energy = Math.max(0, s.energy - ENERGY_SPLIT_COST)
 
@@ -276,252 +313,260 @@ export default function SplitlingsCanvas({ onGameOver, onScoreUpdate, isGuest = 
       canvas.style.width = s.width + 'px'
       canvas.style.height = s.height + 'px'
       if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      // keep the canvas HUD clear of the notch + top nav row
+      const sat = parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue('--safe-top'),
+      ) || 0
+      s.hudTop = sat + 56
     }
 
     resize()
     window.addEventListener('resize', resize)
+    window.addEventListener('orientationchange', resize)
 
-    function loop() {
+    let last = performance.now()
+
+    function loop(now: number) {
       if (!ctx) return
       const { width, height } = s
+      // normalise to 60fps frame units so 120Hz devices don't run 2× speed
+      const dt = Math.min(Math.max((now - last) / (1000 / 60), 0), 3)
+      last = now
 
-      // background
+      const running = s.started && !s.paused && !s.showMenu && !s.gameOver
+
+      if (running) {
+        // recharge energy
+        s.energy = Math.min(ENERGY_MAX, s.energy + ENERGY_RECHARGE_RATE * dt)
+
+        // wave timer — add new orbs every 15 seconds of surviving
+        s.waveTimer += dt
+        if (s.waveTimer >= 60 * 15) {
+          s.waveTimer = 0
+          s.wave++
+          const newCount = Math.min(3, Math.floor(s.wave / 2) + 1)
+          if (s.orbs.length + newCount <= MAX_ORB_COUNT) {
+            s.orbs.push(...spawnOrbs(newCount, width, height))
+          }
+        }
+
+        // update orbs
+        let dead = false
+        for (const orb of s.orbs) {
+          orb.age += dt
+          orb.pulse += 0.022 * dt
+          const growthRate = GROWTH_RATE_BASE * (1 + (s.wave - 1) * 0.1)
+          orb.r += growthRate * dt
+          orb.x += orb.vx * dt
+          orb.y += orb.vy * dt
+
+          // bounce off walls
+          if (orb.x - orb.r < 0) { orb.x = orb.r; orb.vx = Math.abs(orb.vx) }
+          if (orb.x + orb.r > width) { orb.x = width - orb.r; orb.vx = -Math.abs(orb.vx) }
+          if (orb.y - orb.r < 0) { orb.y = orb.r; orb.vy = Math.abs(orb.vy) }
+          if (orb.y + orb.r > height) { orb.y = height - orb.r; orb.vy = -Math.abs(orb.vy) }
+
+          if (orb.r >= SUPERNOVA_RADIUS) dead = true
+        }
+
+        if (dead) triggerGameOver()
+      }
+
+      // draw (always — keeps the frozen scene visible under pause/game-over)
       ctx.fillStyle = 'hsl(230, 25%, 8%)'
       ctx.fillRect(0, 0, width, height)
 
-      if (!s.started || s.paused || s.showMenu) {
-        s.raf = requestAnimationFrame(loop)
-        return
-      }
-
-      // recharge energy
-      s.energy = Math.min(ENERGY_MAX, s.energy + ENERGY_RECHARGE_RATE)
-
-      // wave timer — add new orbs every 15 seconds of surviving
-      s.waveTimer++
-      if (s.waveTimer >= 60 * 15) {
-        s.waveTimer = 0
-        s.wave++
-        const newCount = Math.min(3, Math.floor(s.wave / 2) + 1)
-        if (s.orbs.length + newCount <= 30) {
-          s.orbs.push(...spawnOrbs(newCount, width, height))
-        }
-      }
-
-      // update orbs
-      let dead = false
-      for (const orb of s.orbs) {
-        orb.age++
-        orb.pulse += 0.022
-        const growthRate = GROWTH_RATE_BASE * (1 + (s.wave - 1) * 0.1)
-        orb.r += growthRate
-        orb.x += orb.vx
-        orb.y += orb.vy
-
-        // bounce off walls
-        if (orb.x - orb.r < 0) { orb.x = orb.r; orb.vx = Math.abs(orb.vx) }
-        if (orb.x + orb.r > width) { orb.x = width - orb.r; orb.vx = -Math.abs(orb.vx) }
-        if (orb.y - orb.r < 0) { orb.y = orb.r; orb.vy = Math.abs(orb.vy) }
-        if (orb.y + orb.r > height) { orb.y = height - orb.r; orb.vy = -Math.abs(orb.vy) }
-
-        if (orb.r >= SUPERNOVA_RADIUS) dead = true
-      }
-
-      // draw orbs
       for (const orb of s.orbs) {
         drawOrb(ctx, orb)
       }
 
-      // HUD
-      drawHUD(ctx, s.score, s.wave, s.combo, s.energy, width)
+      if (s.started) {
+        drawHUD(ctx, s.score, s.wave, s.combo, s.energy, width, s.hudTop)
+      }
 
       // splash texts
       s.splashTexts = s.splashTexts.filter(t => t.alpha > 0)
       for (const t of s.splashTexts) {
-        ctx.globalAlpha = t.alpha
+        ctx.globalAlpha = Math.max(0, t.alpha)
         ctx.fillStyle = t.color
         ctx.font = 'bold 16px sans-serif'
         ctx.textAlign = 'center'
         ctx.fillText(t.text, t.x, t.y)
-        t.y += t.vy
-        t.alpha -= 0.018
+        if (running) {
+          t.y += t.vy * dt
+          t.alpha -= 0.018 * dt
+        }
       }
       ctx.globalAlpha = 1
-
-      if (dead) {
-        triggerGameOver()
-        return
-      }
 
       s.raf = requestAnimationFrame(loop)
     }
 
     s.raf = requestAnimationFrame(loop)
 
-    // touch/mouse input
-    function getPos(e: MouseEvent | TouchEvent) {
-      const rect = canvas!.getBoundingClientRect()
-      if ('touches' in e) {
-        return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top }
-      }
-      return { x: (e as MouseEvent).clientX - rect.left, y: (e as MouseEvent).clientY - rect.top }
-    }
-
-    function onDown(e: MouseEvent | TouchEvent) {
-      const { x, y } = getPos(e)
+    // Pointer events — unified mouse + touch, no synthetic double-fire
+    // (touchend used to be followed by a compat mouseup → double splits).
+    function onPointerDown(e: PointerEvent) {
+      if (!e.isPrimary) return
       s.holdStart = Date.now()
+      if (s.holdTimer) clearTimeout(s.holdTimer)
       s.holdTimer = setTimeout(() => {
-        if (s.started && !s.gameOver) {
-          s.showMenu = !s.showMenu
-          setOverlay(s.showMenu ? 'menu' : null)
-        }
+        s.holdTimer = null
+        openPauseMenu()
       }, 600)
     }
 
-    function onUp(e: MouseEvent | TouchEvent) {
+    function onPointerUp(e: PointerEvent) {
+      if (!e.isPrimary) return
       if (s.holdTimer) {
         clearTimeout(s.holdTimer)
         s.holdTimer = null
       }
       if (Date.now() - s.holdStart < 600) {
         const rect = canvas!.getBoundingClientRect()
-        let x: number, y: number
-        if ('changedTouches' in e) {
-          x = e.changedTouches[0].clientX - rect.left
-          y = e.changedTouches[0].clientY - rect.top
-        } else {
-          x = (e as MouseEvent).clientX - rect.left
-          y = (e as MouseEvent).clientY - rect.top
-        }
-        handleTap(x, y)
+        handleTap(e.clientX - rect.left, e.clientY - rect.top)
       }
     }
 
-    canvas.addEventListener('mousedown', onDown)
-    canvas.addEventListener('mouseup', onUp)
-    canvas.addEventListener('touchstart', onDown, { passive: true })
-    canvas.addEventListener('touchend', onUp, { passive: true })
+    function onPointerCancel() {
+      if (s.holdTimer) {
+        clearTimeout(s.holdTimer)
+        s.holdTimer = null
+      }
+    }
+
+    // Auto-pause when the tab/app goes to background (calls, app switch)
+    function onVisibility() {
+      if (document.hidden) openPauseMenu()
+    }
+
+    canvas.addEventListener('pointerdown', onPointerDown)
+    canvas.addEventListener('pointerup', onPointerUp)
+    canvas.addEventListener('pointercancel', onPointerCancel)
+    document.addEventListener('visibilitychange', onVisibility)
 
     return () => {
       cancelAnimationFrame(s.raf)
+      if (s.holdTimer) clearTimeout(s.holdTimer)
       window.removeEventListener('resize', resize)
-      canvas.removeEventListener('mousedown', onDown)
-      canvas.removeEventListener('mouseup', onUp)
-      canvas.removeEventListener('touchstart', onDown)
-      canvas.removeEventListener('touchend', onUp)
+      window.removeEventListener('orientationchange', resize)
+      canvas.removeEventListener('pointerdown', onPointerDown)
+      canvas.removeEventListener('pointerup', onPointerUp)
+      canvas.removeEventListener('pointercancel', onPointerCancel)
+      document.removeEventListener('visibilitychange', onVisibility)
     }
-  }, [handleTap, triggerGameOver])
+  }, [handleTap, triggerGameOver, openPauseMenu])
 
   // Start the game on mount
   useEffect(() => {
-    setTimeout(() => {
+    const id = setTimeout(() => {
       const s = stateRef.current
       if (!s.started) {
         startGame()
       }
     }, 100)
+    return () => clearTimeout(id)
   }, [startGame])
 
-  function openMenu() {
-    const s = stateRef.current
-    if (!s.started || s.gameOver) return
-    s.paused = true
-    s.showMenu = true
-    setOverlay('menu')
-  }
 
   return (
     <div className="relative w-full h-full">
-      <canvas ref={canvasRef} className="absolute inset-0 touch-none" />
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 touch-none"
+        role="img"
+        aria-label="Splitlings game arena — tap orbs to split them"
+      />
 
-      {/* Always-visible MENU button — pauses + opens overlay */}
+      {/* Always-visible MENU button — pauses + opens overlay. ≥44px touch target. */}
       {!overlay && (
         <button
           type="button"
-          onClick={openMenu}
-          aria-label="Open menu and pause"
-          className="absolute top-3 right-3 z-10 inline-flex items-center gap-1 rounded-md border border-game-border-strong bg-game-surface/85 backdrop-blur-sm px-3 py-1.5 text-[10px] font-mono font-bold tracking-[3px] uppercase text-game-ink hover:border-game-accent/60"
+          onClick={openPauseMenu}
+          aria-label="Pause and open menu"
+          className="absolute right-3 z-10 inline-flex h-11 min-w-11 items-center gap-1 rounded-game-md border border-game-border-strong bg-game-surface/85 px-4 font-mono text-[11px] font-bold uppercase tracking-[3px] text-game-ink backdrop-blur-sm hover:border-game-accent/60"
+          style={{ top: 'calc(env(safe-area-inset-top, 0px) + 6px)' }}
         >
           ≡ Menu
         </button>
       )}
 
-      {/* Pause/Menu overlay */}
-      {overlay === 'menu' && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm z-10">
-          <div className="bg-background/90 border border-border/50 rounded-2xl p-8 w-72 text-center space-y-4">
-            <h2 className="text-2xl font-bold text-primary">PAUSED</h2>
-            <p className="text-sm text-muted-foreground">Score: {stateRef.current.score.toLocaleString()}</p>
-            <button
-              className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold"
-              onClick={() => {
-                stateRef.current.showMenu = false
-                stateRef.current.paused = false
-                setOverlay(null)
-              }}
-            >
-              Resume
-            </button>
-            <button
-              className="w-full py-3 rounded-xl border border-border/50 text-foreground font-medium"
-              onClick={() => {
-                stateRef.current.showMenu = false
-                startGame()
-              }}
-            >
-              New Game
-            </button>
-            <a
-              href="/leaderboard"
-              className="block w-full py-3 rounded-xl border border-border/50 text-foreground font-medium"
+      {/* Pause/Menu overlay — games DS */}
+      <PauseOverlay
+        open={overlay === 'menu'}
+        title="PAUSED"
+        onResume={resumeGame}
+        onRestart={startGame}
+        onQuit={() => router.push('/')}
+        extra={
+          <>
+            <p className="text-center font-mono text-sm text-game-ink-muted">
+              Score{' '}
+              <span className="font-bold text-game-accent">
+                {pauseStats.score.toLocaleString()}
+              </span>{' '}
+              · Wave {pauseStats.wave}
+            </p>
+            <NeonButton
+              variant="ghost"
+              size="md"
+              fullWidth
+              onClick={() => router.push('/leaderboard')}
             >
               Leaderboard
-            </a>
-          </div>
-        </div>
-      )}
+            </NeonButton>
+          </>
+        }
+      />
 
-      {/* Game over overlay */}
-      {overlay === 'gameover' && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm z-10">
-          <div className="bg-background/90 border border-border/50 rounded-2xl p-8 w-72 text-center space-y-4">
-            <div className="text-5xl font-bold text-destructive animate-pulse">SUPERNOVA!</div>
-            <p className="text-muted-foreground text-sm">An orb went supernova</p>
-            <div className="py-2">
-              <div className="text-4xl font-bold text-primary">{finalScore.toLocaleString()}</div>
-              <div className="text-muted-foreground text-sm">Wave {finalWave}</div>
-            </div>
-            {isGuest ? (
-              <a
-                href="/auth/login"
-                className="block w-full py-3 rounded-xl border border-primary/40 text-primary font-medium text-sm"
-                data-testid="signin-to-submit"
-              >
-                Sign in to submit your score →
-              </a>
-            ) : (
-              <p className="text-xs text-primary/80">Score submitted to leaderboard</p>
-            )}
-            <button
-              className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold"
-              onClick={startGame}
-            >
-              Play Again
-            </button>
+      {/* Game over overlay — games DS */}
+      <GameOverScreen
+        open={overlay === 'gameover'}
+        title="SUPERNOVA"
+        subtitle="An orb hit critical mass"
+        stats={[
+          { label: 'Score', value: finalScore.toLocaleString(), tone: 'accent' },
+          { label: 'Wave', value: finalWave, tone: 'accent-2' },
+        ]}
+        onReplay={startGame}
+        replayLabel="Play Again"
+        onSubmit={!isGuest && submitState === 'error' ? onRetrySubmit : undefined}
+        submitLabel="Retry save"
+        submitting={submitState === 'saving'}
+        onQuit={() => router.push('/leaderboard')}
+        quitLabel="Leaderboard"
+        extra={
+          isGuest ? (
             <a
-              href="/leaderboard"
-              className="block w-full py-3 rounded-xl border border-border/50 text-foreground font-medium"
+              href="/auth/login?next=/game"
+              data-testid="signin-to-submit"
+              className="inline-flex min-h-11 w-full items-center justify-center rounded-game-pill border border-game-accent/40 px-4 text-center text-sm font-medium text-game-accent hover:border-game-accent"
             >
-              Leaderboard
+              Sign in to save your score →
             </a>
-          </div>
-        </div>
-      )}
+          ) : submitState === 'saving' ? (
+            <p className="text-center font-mono text-xs uppercase tracking-[2px] text-game-ink-muted" aria-live="polite">
+              Saving score…
+            </p>
+          ) : submitState === 'saved' ? (
+            <p className="text-center font-mono text-xs uppercase tracking-[2px] text-game-success" aria-live="polite">
+              Score saved to leaderboard
+            </p>
+          ) : submitState === 'error' ? (
+            <p className="text-center font-mono text-xs uppercase tracking-[2px] text-game-danger" aria-live="polite">
+              Could not save score
+            </p>
+          ) : null
+        }
+      />
 
-      {/* Touch hint — shown briefly */}
+      {/* Touch hint */}
       {!overlay && (
-        <div className="absolute bottom-6 left-0 right-0 text-center pointer-events-none">
-          <p className="text-xs text-white/30">Tap orbs to split · Tap ≡ Menu to pause</p>
+        <div
+          className="pointer-events-none absolute left-0 right-0 text-center"
+          style={{ bottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }}
+        >
+          <p className="text-xs text-white/30">Tap orbs to split · Hold or tap ≡ Menu to pause</p>
         </div>
       )}
     </div>

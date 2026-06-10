@@ -44,6 +44,7 @@ export default async function LandingPage() {
       </div>
 
       <div className="relative z-10 w-full max-w-md px-4 text-center mt-[44vh]">
+        <h1 className="sr-only">Splitlings</h1>
         <p className="text-[11px] tracking-[5px] uppercase text-game-ink-muted font-mono mb-2">
           Tap · Split · Survive
         </p>
@@ -87,8 +88,8 @@ export default async function LandingPage() {
         </div>
 
         {!session && (
-          <p className="mt-6 mb-4 text-xs text-game-ink-faint">
-            <Link href="/auth/login" className="text-game-accent hover:underline">
+          <p className="mt-4 mb-4 text-xs text-game-ink-faint">
+            <Link href="/auth/login" className="inline-flex min-h-11 items-center text-game-accent hover:underline">
               Sign in to save scores →
             </Link>
           </p>

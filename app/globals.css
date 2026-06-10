@@ -55,6 +55,10 @@
 
   --font-arcade:   "Anton", "Impact", system-ui, sans-serif;
   --font-ui:       system-ui, -apple-system, sans-serif;
+
+  /* Safe-area insets (notch / home indicator) — read from JS for canvas HUD */
+  --safe-top:    env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 @theme inline {
