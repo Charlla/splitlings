@@ -12,7 +12,6 @@ import {
   ENERGY_MAX,
   ENERGY_SPLIT_COST,
   ENERGY_RECHARGE_RATE,
-  MAX_ORB_COUNT,
   GROWTH_RATE_BASE,
   WAVE_GROWTH_RAMP,
   WAVE_DURATION_FRAMES,
@@ -126,8 +125,9 @@ function drawHUD(
   width: number,
   top: number,
 ) {
-  // energy bar — left-aligned so it never collides with the right-side score
-  const barW = Math.min(width * 0.45, 220)
+  // Single tight strip: energy bar (left) · score (right, clear of the Menu
+  // button). No title / sign-in here — those live outside the game screen.
+  const barW = Math.min(width * 0.4, 220)
   const barH = 10
   const bx = 16
   const by = top + 14
@@ -154,15 +154,17 @@ function drawHUD(
     ctx.fill()
   }
 
-  // score — top-right, below the Menu button row
+  // score — same strip, right-aligned just left of the Menu button
+  // (button is icon-only ≈44px on mobile, "≡ Menu" ≈100px on sm+)
+  const scoreRight = width - (width >= 640 ? 128 : 76)
   ctx.textAlign = 'right'
   ctx.fillStyle = 'rgba(255,255,255,0.9)'
   ctx.font = 'bold 22px monospace'
-  ctx.fillText(score.toLocaleString(), width - 16, top + 24)
+  ctx.fillText(score.toLocaleString(), scoreRight, top + 24)
 
   ctx.font = '11px monospace'
   ctx.fillStyle = 'rgba(255,255,255,0.5)'
-  ctx.fillText(`WAVE ${wave}`, width - 16, top + 40)
+  ctx.fillText(`WAVE ${wave}`, scoreRight, top + 40)
 
   // combo — under the energy bar
   if (combo > 1) {
@@ -259,24 +261,23 @@ export default function SplitlingsCanvas({
     const s = stateRef.current
     if (!s.started || s.gameOver || s.paused || s.showMenu) return
 
-    // find the tapped orb (largest first if overlapping)
-    const sorted = [...s.orbs].sort((a, b) => b.r - a.r)
-    const hit = sorted.find(o => {
-      const dx = o.x - cx, dy = o.y - cy
-      return Math.sqrt(dx * dx + dy * dy) <= o.r + 8
-    })
-    if (!hit) return
-    const newR = hit.r * SPLIT_RADIUS_FACTOR
-    if (newR < MIN_FRAGMENT_RADIUS) {
-      // too small to split — a color can never be eliminated from the board
+    // MULTI-POP: every orb whose body contains the tap point splits — when
+    // orbs overlap, ALL of them pop, not just the topmost. No board cap, no
+    // "too crowded" refusal: absorption pulls the population back down.
+    const hits = s.orbs
+      .filter(o => {
+        const dx = o.x - cx, dy = o.y - cy
+        return Math.sqrt(dx * dx + dy * dy) <= o.r + 8
+      })
+      .sort((a, b) => b.r - a.r) // largest first (drives combo color + splash order)
+    if (hits.length === 0) return
+
+    // Orbs too small to split silently don't (a color can never be eliminated).
+    const splittable = hits.filter(o => o.r * SPLIT_RADIUS_FACTOR >= MIN_FRAGMENT_RADIUS)
+    if (splittable.length === 0) {
+      // tap hit only too-small orbs — subtle feedback so it never feels dead
       s.splashTexts.push({
         x: cx, y: cy - 20, text: 'TOO SMALL', alpha: 1, vy: -0.8, color: 'rgba(255,255,255,0.7)',
-      })
-      return
-    }
-    if (s.orbs.length - 1 + SPLIT_COUNT > MAX_ORB_COUNT) {
-      s.splashTexts.push({
-        x: cx, y: cy - 20, text: 'TOO CROWDED', alpha: 1, vy: -0.8, color: 'hsl(0,90%,60%)',
       })
       return
     }
@@ -288,10 +289,11 @@ export default function SplitlingsCanvas({
       return
     }
 
+    // One energy cost per tap, however many orbs pop — multi-pop is the reward.
     s.energy = Math.max(0, s.energy - ENERGY_SPLIT_COST)
 
-    // combo logic
-    const ci = colorIndex(hit.color)
+    // combo: increments once per tap, chained on the LARGEST popped orb's color
+    const ci = colorIndex(splittable[0].color)
     if (s.lastColorIndex === ci) {
       s.combo = Math.min(s.combo + 1, 12)
     } else {
@@ -299,31 +301,35 @@ export default function SplitlingsCanvas({
     }
     s.lastColorIndex = ci
 
-    const pointsBase = Math.round(hit.r * 5)
-    const points = pointsBase * s.combo
-    s.score += points
-    onScoreUpdate(s.score, s.combo)
-
-    // splash text
-    s.splashTexts.push({
-      x: hit.x,
-      y: hit.y - hit.r,
-      text: s.combo > 1 ? `+${points} ×${s.combo}` : `+${points}`,
-      alpha: 1,
-      vy: -1.2,
-      color: s.combo > 2 ? 'hsl(55,90%,60%)' : 'rgba(255,255,255,0.9)',
-    })
-
-    // split the orb into SPLIT_COUNT fragments fanned out from the tap angle.
-    // Fragments are eat-immune for a moment (age-based) so they escape before
-    // same-color absorption starts pulling them back together.
-    const baseAngle = Math.atan2(cy - hit.y, cx - hit.x) + Math.PI / 2
     const spd = SPLIT_VELOCITY_BOOST
-    s.orbs = s.orbs.filter(o => o.id !== hit.id)
-    for (let i = 0; i < SPLIT_COUNT; i++) {
-      const a = baseAngle + (i * Math.PI * 2) / SPLIT_COUNT
-      s.orbs.push(makeOrb(hit.x, hit.y, newR, Math.cos(a) * spd, Math.sin(a) * spd, hit.color))
+    const popped = new Set<number>()
+    for (const hit of splittable) {
+      popped.add(hit.id)
+      const newR = hit.r * SPLIT_RADIUS_FACTOR
+
+      // every popped orb scores, all at this tap's combo multiplier
+      const points = Math.round(hit.r * 5) * s.combo
+      s.score += points
+      s.splashTexts.push({
+        x: hit.x,
+        y: hit.y - hit.r,
+        text: s.combo > 1 ? `+${points} ×${s.combo}` : `+${points}`,
+        alpha: 1,
+        vy: -1.2,
+        color: s.combo > 2 ? 'hsl(55,90%,60%)' : 'rgba(255,255,255,0.9)',
+      })
+
+      // split into SPLIT_COUNT fragments fanned out from the tap angle.
+      // Fragments are eat-immune for a moment (age-based) so they escape
+      // before same-color absorption starts pulling them back together.
+      const baseAngle = Math.atan2(cy - hit.y, cx - hit.x) + Math.PI / 2
+      for (let i = 0; i < SPLIT_COUNT; i++) {
+        const a = baseAngle + (i * Math.PI * 2) / SPLIT_COUNT
+        s.orbs.push(makeOrb(hit.x, hit.y, newR, Math.cos(a) * spd, Math.sin(a) * spd, hit.color))
+      }
     }
+    s.orbs = s.orbs.filter(o => !popped.has(o.id))
+    onScoreUpdate(s.score, s.combo)
   }, [onScoreUpdate])
 
   useEffect(() => {
@@ -344,11 +350,12 @@ export default function SplitlingsCanvas({
       canvas.style.width = s.width + 'px'
       canvas.style.height = s.height + 'px'
       if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      // keep the canvas HUD clear of the notch + top nav row
+      // keep the canvas HUD clear of the notch only — the HUD shares one
+      // tight strip with the Menu button (no separate nav row anymore)
       const sat = parseFloat(
         getComputedStyle(document.documentElement).getPropertyValue('--safe-top'),
       ) || 0
-      s.hudTop = sat + 56
+      s.hudTop = sat + 8
     }
 
     resize()
@@ -554,10 +561,11 @@ export default function SplitlingsCanvas({
           type="button"
           onClick={openPauseMenu}
           aria-label="Pause and open menu"
-          className="absolute right-3 z-10 inline-flex h-11 min-w-11 items-center gap-1 rounded-game-md border border-game-border-strong bg-game-surface/85 px-4 font-mono text-[11px] font-bold uppercase tracking-[3px] text-game-ink backdrop-blur-sm hover:border-game-accent/60"
+          className="absolute right-3 z-10 inline-flex h-11 min-w-11 items-center justify-center gap-1 rounded-game-md border border-game-border-strong bg-game-surface/85 px-3 font-mono text-[11px] font-bold uppercase tracking-[3px] text-game-ink backdrop-blur-sm hover:border-game-accent/60 sm:px-4"
           style={{ top: 'calc(env(safe-area-inset-top, 0px) + 6px)' }}
         >
-          ≡ Menu
+          <span aria-hidden="true" className="text-sm leading-none">≡</span>
+          <span className="hidden sm:inline">Menu</span>
         </button>
       )}
 

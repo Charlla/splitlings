@@ -4,7 +4,8 @@
 //   1. Every orb GROWS steadily over time — all orbs, all the time.
 //   2. Same-color collision: the LARGER orb EATS the smaller one and absorbs
 //      its mass (area-conserving: r = sqrt(rL² + rS²)).
-//   3. Tapping an orb SPLITS it into fragments. Fragments keep growing, and
+//   3. Tapping SPLITS every orb under the tap point into fragments (multi-pop
+//      when orbs overlap). Fragments keep growing, and
 //      same-color absorption cascades them back into bigger orbs — no new
 //      orbs are ever spawned into the game.
 //   4. The board starts with exactly ONE orb of each color. Population only
@@ -64,11 +65,15 @@ export const WAVE_GROWTH_RAMP = 0.12   // +12% growth per wave survived
 export const WAVE_DURATION_FRAMES = 60 * 15 // a "wave" = 15s survived (difficulty tick only — spawns nothing)
 
 // ── Splitting (tap) ─────────────────────────────────────────────────────
-export const SPLIT_COUNT = 3           // fragments per pop
+// A tap splits EVERY orb whose body contains the tap point (overlapping orbs
+// all pop — multi-pop). One tap = one energy cost regardless of how many pop.
+// There is no board cap: energy throttles tap rate and MIN_FRAGMENT_RADIUS
+// bounds how far things can be split, and absorption pulls the count back
+// down, so the population self-regulates without ever refusing a tap.
+export const SPLIT_COUNT = 3           // fragments per popped orb
 export const SPLIT_RADIUS_FACTOR = 0.5 // fragment r = 0.5r → ~25% of area vented per split
-export const MIN_FRAGMENT_RADIUS = 9   // refuse the split if fragments would be smaller (a color can never vanish)
+export const MIN_FRAGMENT_RADIUS = 9   // orbs whose fragments would be smaller silently don't split (a color can never vanish)
 export const SPLIT_VELOCITY_BOOST = 2.5
-export const MAX_ORB_COUNT = 28        // splits refused beyond this (absorption brings the count back down)
 
 // ── Absorption (same-color eat) ─────────────────────────────────────────
 // The larger orb eats the smaller when the smaller's centre is inside it.

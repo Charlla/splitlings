@@ -29,13 +29,15 @@ export async function POST(req: NextRequest) {
   const rawScore = body?.score
   const rawWave = body?.wave ?? 1
 
-  // Sanity bounds. Theoretical max ≈ 26 splits/wave × 4 800 pts/split ≈ 125k
-  // (energy-limited) plus absorption cascade points (≤ ~230 each, ~2 per
-  // split ≈ 12k) ≈ 137k per 15s wave — real play is far below. Anything
-  // outside these envelopes is a forged payload, not a game.
+  // Sanity bounds. A tap now MULTI-POPS every orb under the point (one energy
+  // cost, each popped orb scores at the tap's combo). Energy still limits taps
+  // to ~26 per 15s wave; worst case ≈ 12 overlapping orbs × 4 800 pts each
+  // ≈ 58k per tap → ~1.5M per wave theoretical, plus absorption cascade
+  // points — real play is far below. Anything outside these envelopes is a
+  // forged payload, not a game.
   const MAX_WAVE = 500
-  const MAX_SCORE = 5_000_000
-  const MAX_PER_WAVE = 150_000
+  const MAX_SCORE = 20_000_000
+  const MAX_PER_WAVE = 1_500_000
 
   if (typeof rawScore !== 'number' || !Number.isFinite(rawScore) || rawScore <= 0) {
     return NextResponse.json({ error: 'Invalid score' }, { status: 400 })
