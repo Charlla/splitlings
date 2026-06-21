@@ -1,0 +1,33 @@
+# Splitlings
+
+> Splitlings is a free, single-player tap-to-split orb-defence arcade game that
+> runs in any web browser. Tap glowing orbs to split them before they grow to
+> supernova size, chain same-color splits for combo multipliers, manage your
+> energy bar, and climb the global leaderboard.
+
+## What it is
+- Genre: arcade / action / casual, single-player.
+- Platform: web browser (mobile-first, also desktop). No download or install.
+- Price: free to play.
+- Account: optional. Play instantly as a guest; sign in with a one-time email
+  code only to save scores to the leaderboard.
+
+## How to play
+- Tap orbs to split them into smaller pieces.
+- Same-colored orbs merge — the bigger orb eats the smaller one.
+- Everything keeps growing; chain same-color splits for combo multipliers.
+- Manage your energy bar wisely.
+- Open the pause menu with the ≡ Menu button (top-right) or by tapping and
+  holding anywhere.
+- Don't let any orb reach supernova size, or the run ends.
+
+## Key pages
+- [Home](https://splitlings.com): overview and how-to-play.
+- [Play](https://splitlings.com/game): launch the game in your browser.
+- [Leaderboard](https://splitlings.com/leaderboard): top 50 all-time scores.
+
+## Publisher
+- Made by Bot & Botty — https://botandbotty.com
+
+## Contact
+- Email: hello@botandbotty.com

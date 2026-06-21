@@ -1,7 +1,37 @@
+import type { Metadata } from 'next'
 import { getServiceClient } from '@/lib/auth'
+import JsonLd from '@/components/JsonLd'
+import { SITE_URL } from '@/lib/seo'
 import Link from 'next/link'
 
 export const revalidate = 60
+
+export const metadata: Metadata = {
+  title: 'Leaderboard',
+  description:
+    'The top 50 all-time Splitlings scores. See the highest scores and waves reached, then sign in to climb the global leaderboard.',
+  alternates: { canonical: '/leaderboard' },
+  openGraph: {
+    title: 'Splitlings Leaderboard — Top 50 all-time scores',
+    description:
+      'The top 50 all-time Splitlings scores. See the highest scores and waves reached, then sign in to climb the global leaderboard.',
+    url: `${SITE_URL}/leaderboard`,
+  },
+}
+
+const breadcrumbJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Splitlings', item: SITE_URL },
+    {
+      '@type': 'ListItem',
+      position: 2,
+      name: 'Leaderboard',
+      item: `${SITE_URL}/leaderboard`,
+    },
+  ],
+}
 
 interface ScoreRow {
   id: string
@@ -26,6 +56,7 @@ export default async function LeaderboardPage() {
       className="min-h-svh"
       style={{ background: 'hsl(230, 25%, 8%)' }}
     >
+      <JsonLd data={breadcrumbJsonLd} />
       {/* Header */}
       <div className="border-b" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
         <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">

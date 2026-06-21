@@ -1,5 +1,7 @@
 import { getSession } from '@/lib/auth'
 import OrbsBackground from '@/components/orbs-background'
+import JsonLd from '@/components/JsonLd'
+import { videoGameJsonLd, faqJsonLd } from '@/lib/seo'
 import Image from 'next/image'
 import Link from 'next/link'
 
@@ -18,6 +20,8 @@ export default async function LandingPage() {
 
   return (
     <main className="relative flex min-h-svh flex-col items-center justify-center overflow-hidden bg-game-deep">
+      <JsonLd data={videoGameJsonLd} />
+      <JsonLd data={faqJsonLd} />
       <OrbsBackground />
 
       {/* Hero — AI-generated title art behind content */}
