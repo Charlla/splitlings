@@ -1,7 +1,10 @@
 // Centralized SEO / discoverability constants and JSON-LD builders.
 // Keep facts here consistent with page copy, metadata, and llms.txt (no drift).
 
-export const SITE_URL = 'https://splitlings.com'
+// Canonical host is www — the apex (splitlings.com) 307-redirects to www, so
+// all absolute URLs (canonical, sitemap, OG, JSON-LD) must point at www to
+// avoid pointing search engines/LLMs at a redirecting URL.
+export const SITE_URL = 'https://www.splitlings.com'
 export const SITE_NAME = 'Splitlings'
 export const SITE_TAGLINE = 'Split the orbs before they go supernova'
 export const SITE_DESCRIPTION =

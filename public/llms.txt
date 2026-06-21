@@ -22,9 +22,9 @@
 - Don't let any orb reach supernova size, or the run ends.
 
 ## Key pages
-- [Home](https://splitlings.com): overview and how-to-play.
-- [Play](https://splitlings.com/game): launch the game in your browser.
-- [Leaderboard](https://splitlings.com/leaderboard): top 50 all-time scores.
+- [Home](https://www.splitlings.com): overview and how-to-play.
+- [Play](https://www.splitlings.com/game): launch the game in your browser.
+- [Leaderboard](https://www.splitlings.com/leaderboard): top 50 all-time scores.
 
 ## Publisher
 - Made by Bot & Botty — https://botandbotty.com
